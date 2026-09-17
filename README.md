@@ -466,9 +466,9 @@ supervisord config and is the one place that decides internal ports.
 
 #### Base images
 
-The build avoids Docker Hub: Bun comes from `ghcr.io/oven-sh/bun`, Caddy is
-downloaded from the `caddyserver/caddy` GitHub releases, and Node, Redis, Python
-and supervisord come from Alpine's own package repositories.
+The build avoids Docker Hub: Bun and Caddy are downloaded from the `oven-sh/bun`
+and `caddyserver/caddy` GitHub releases, and Node, Redis, Python and supervisord
+come from Alpine's own package repositories.
 
 The one exception is the Elixir base image, which is not published to `ghcr.io`.
 If Docker Hub is blocked for you, mirror it and point the build at your copy:
@@ -477,8 +477,9 @@ If Docker Hub is blocked for you, mirror it and point the build at your copy:
 docker build --build-arg BASE_IMAGE=ghcr.io/<owner>/elixir:1.19-alpine -t lanyard:latest .
 ```
 
-`BUN_IMAGE` and `CADDY_VERSION` are build args too, if you need to redirect or
-pin those as well.
+`BUN_VERSION` and `CADDY_VERSION` are build args too, if you need to pin those
+to something else. Keep `BUN_VERSION` in step with the `packageManager` field in
+`packages/profile-readme/package.json`.
 
 Note, that you're **hosting a http server, not https**. You'll need to use a **reverse proxy** such as [traefik](https://traefik.io/traefik/) if you want to secure your API endpoint.
 

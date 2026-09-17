@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-#
 # All-in-one Lanyard image.
 #
 # Builds the Elixir server plus every HTTP service in packages/ and runs them in
@@ -13,15 +11,15 @@
 #
 #   docker pull ghcr.io/<owner>/lanyard:latest
 #
-# Nothing here is pulled from Docker Hub except BASE_IMAGE. There is no official
+# BASE_IMAGE is the only image pulled from a registry. There is no official
 # Elixir image on ghcr.io, so if your environment blocks Docker Hub entirely,
 # mirror one into your own registry and pass it in:
 #
 #   docker build --build-arg BASE_IMAGE=ghcr.io/<owner>/elixir:1.19-alpine .
 ARG BASE_IMAGE=elixir:1.19-alpine
-# Bun is pulled from GitHub's registry rather than Docker Hub.
-ARG BUN_IMAGE=ghcr.io/oven-sh/bun:1.2.13-alpine
-# Caddy is fetched from its GitHub releases rather than the Docker Hub image.
+# Bun and Caddy are fetched from their GitHub releases rather than Docker Hub
+# images. Keep BUN_VERSION in step with packages/profile-readme's packageManager.
+ARG BUN_VERSION=1.2.13
 ARG CADDY_VERSION=2.9.1
 
 # --- 1. the Lanyard server itself -------------------------------------------
@@ -60,7 +58,25 @@ COPY packages/graphql/src ./src
 RUN npx tsc && npm prune --omit=dev
 
 # --- 3. packages/profile-readme ---------------------------------------------
-FROM ${BUN_IMAGE} AS build-readme
+FROM ${BASE_IMAGE} AS build-readme
+
+ARG BUN_VERSION
+ARG TARGETARCH=amd64
+
+# Bun ships musl builds on its GitHub releases. The amd64 baseline build is used
+# so the image also builds on CPUs without AVX2.
+RUN apk add --no-cache curl unzip libstdc++ && \
+	case "$TARGETARCH" in \
+		amd64) BUN_TARGET=bun-linux-x64-musl-baseline ;; \
+		arm64) BUN_TARGET=bun-linux-aarch64-musl ;; \
+		*) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+	esac && \
+	curl -fsSL -o /tmp/bun.zip \
+		"https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/${BUN_TARGET}.zip" && \
+	unzip -q -j /tmp/bun.zip "${BUN_TARGET}/bun" -d /usr/local/bin && \
+	chmod +x /usr/local/bin/bun && \
+	rm /tmp/bun.zip && \
+	bun --version
 
 WORKDIR /app
 COPY packages/profile-readme/package.json packages/profile-readme/bun.lock ./

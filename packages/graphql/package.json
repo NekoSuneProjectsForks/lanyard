@@ -1,0 +1,24 @@
+{
+  "name": "lanyard-graphql",
+  "version": "1.0.0",
+  "description": "A GraphQL implementation of Lanyard's REST API",
+  "main": "dist/index.js",
+  "repository": "https://github.com/DevSnowflake/lanyard-graphql",
+  "author": "geenva <geenva@users.noreply.github.com>",
+  "license": "MIT",
+  "dependencies": {
+    "apollo-datasource-http": "^0.17.1",
+    "apollo-server": "^3.3.0",
+    "axios": "^0.21.1",
+    "graphql": "^15.5.2"
+  },
+  "scripts": {
+    "build": "yarn add typescript && yarn run tsc",
+    "start": "yarn add typescript && yarn run tsc && node dist/main.js",
+    "dev": "nodemon src/main.ts"
+  },
+  "devDependencies": {
+    "ts-node": "^10.2.1",
+    "typescript": "^4.4.2"
+  }
+}

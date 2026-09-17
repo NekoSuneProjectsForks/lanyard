@@ -29,3 +29,14 @@ lanyard-*.tar
 
 # VSCode Elixir LS Extension
 .elixir_ls/
+
+# packages/ IS part of the build context - the root image builds every service.
+# Only their build artifacts are excluded.
+**/node_modules/
+**/dist/
+**/.next/
+**/.open-next/
+**/.wrangler/
+**/__pycache__/
+**/.venv/
+packages/osu-nowplaying/build/

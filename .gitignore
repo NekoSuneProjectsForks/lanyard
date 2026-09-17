@@ -31,3 +31,28 @@ lanyard-*.tar
 dump.rdb
 
 .DS_Store
+
+# --- packages/ (JS, Python and PowerShell projects) ---
+node_modules/
+dist/
+.next/
+.open-next/
+.wrangler/
+out/
+.vercel
+*.tsbuildinfo
+.env
+.env*.local
+.dev.vars*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# packages/mcp-server
+.venv/
+__pycache__/
+*.pyc
+
+# packages/osu-nowplaying
+packages/osu-nowplaying/build/
+*.exe

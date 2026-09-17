@@ -1,29 +1,111 @@
-FROM elixir:1.19-alpine AS build
+# All-in-one Lanyard image.
+#
+# Builds the Elixir server plus every HTTP service in packages/ and runs them in
+# a single container behind one port. Each service can be switched off at run
+# time with the ENABLE_* environment variables - see docker/entrypoint.sh.
+#
+#   docker build -t lanyard:latest .
+#   docker run -p 4001:4001 -e BOT_TOKEN=<token> lanyard:latest
 
-RUN apk add git
+# --- 1. the Lanyard server itself -------------------------------------------
+FROM elixir:1.19-alpine AS build-api
+
+RUN apk add --no-cache git
 
 ENV MIX_ENV=prod
-
 WORKDIR /app
 
 # get deps first so we have a cache
 ADD mix.exs mix.lock /app/
 RUN \
-	cd /app && \
 	mix local.hex --force && \
 	mix local.rebar --force && \
 	mix deps.get
 
 # then make a release build
-ADD . /app/
+ADD config /app/config
+ADD lib /app/lib
 RUN \
 	mix compile && \
 	mix release
 
+# --- 2. packages/graphql -----------------------------------------------------
+FROM node:22-alpine AS build-graphql
+
+WORKDIR /app
+COPY packages/graphql/package.json ./
+RUN npm install
+COPY packages/graphql/tsconfig.json ./
+COPY packages/graphql/src ./src
+RUN npx tsc && npm prune --omit=dev
+
+# --- 3. packages/profile-readme ---------------------------------------------
+FROM oven/bun:1.2.13-alpine AS build-readme
+
+WORKDIR /app
+COPY packages/profile-readme/package.json packages/profile-readme/bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY packages/profile-readme ./
+# Mounted under a path prefix by the bundled reverse proxy.
+ARG NEXT_BASE_PATH=/readme
+ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN bun run build
+
+# --- 4. runtime --------------------------------------------------------------
+# Based on the Elixir image so the release's ERTS is guaranteed to match.
 FROM elixir:1.19-alpine
 
-RUN apk add ca-certificates redis
+RUN apk add --no-cache \
+	ca-certificates \
+	redis \
+	nodejs \
+	python3 \
+	py3-pip \
+	supervisor \
+	tini
 
-COPY --from=build /app/_build/prod/rel/lanyard /opt/lanyard
+# Caddy fronts every service on a single port.
+COPY --from=caddy:2.9-alpine /usr/bin/caddy /usr/bin/caddy
 
-CMD [ "/opt/lanyard/bin/lanyard", "start" ]
+# packages/mcp-server
+COPY packages/mcp-server/requirements.txt /opt/lanyard-mcp/requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r /opt/lanyard-mcp/requirements.txt
+COPY packages/mcp-server/lanyard_server.py /opt/lanyard-mcp/lanyard_server.py
+
+# the Elixir release
+COPY --from=build-api /app/_build/prod/rel/lanyard /opt/lanyard
+
+# packages/graphql
+COPY --from=build-graphql /app/dist /opt/lanyard-graphql/dist
+COPY --from=build-graphql /app/node_modules /opt/lanyard-graphql/node_modules
+COPY --from=build-graphql /app/package.json /opt/lanyard-graphql/package.json
+
+# packages/profile-readme (run with node, bun is only needed to build)
+COPY --from=build-readme /app/.next /opt/lanyard-readme/.next
+COPY --from=build-readme /app/node_modules /opt/lanyard-readme/node_modules
+COPY --from=build-readme /app/package.json /opt/lanyard-readme/package.json
+COPY --from=build-readme /app/next.config.ts /opt/lanyard-readme/next.config.ts
+
+# packages/js-lanyard and packages/osu-nowplaying are client-side, nothing to run
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /data
+
+# The single published port. Everything else is bound to loopback.
+ENV PORT=4001 \
+	API_PORT=4010 \
+	GRAPHQL_PORT=8080 \
+	README_PORT=3000 \
+	MCP_PORT=8081 \
+	ENABLE_REDIS=true \
+	ENABLE_GRAPHQL=true \
+	ENABLE_README=true \
+	ENABLE_MCP=true \
+	NEXT_TELEMETRY_DISABLED=1
+
+EXPOSE 4001
+VOLUME /data
+
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]

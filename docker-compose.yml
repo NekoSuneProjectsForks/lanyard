@@ -1,0 +1,35 @@
+# The whole stack is a single image and a single container - see Dockerfile.
+#
+#   docker compose up --build
+#
+# Everything is reachable on one host:port (4001 by default):
+#
+#   http://localhost:4001/v1/users/:id   core REST API
+#   ws://localhost:4001/socket           core WebSocket
+#   http://localhost:4001/graphql        packages/graphql
+#   http://localhost:4001/readme         packages/profile-readme
+#   http://localhost:4001/mcp            packages/mcp-server (streamable HTTP)
+#
+# BOT_TOKEN is required; put it in a .env file next to this one.
+
+services:
+  lanyard:
+    build: .
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?set BOT_TOKEN in .env}
+      EXTERNAL_URL: ${EXTERNAL_URL:-http://localhost:4001}
+      COMMAND_PREFIX: ${COMMAND_PREFIX:-.}
+      # Point at an external Redis to use it instead of the bundled one.
+      REDIS_URL: ${REDIS_URL:-}
+      # Turn individual services off without rebuilding.
+      ENABLE_GRAPHQL: ${ENABLE_GRAPHQL:-true}
+      ENABLE_README: ${ENABLE_README:-true}
+      ENABLE_MCP: ${ENABLE_MCP:-true}
+    ports:
+      - "${PORT:-4001}:4001"
+    volumes:
+      - lanyard-data:/data
+
+volumes:
+  lanyard-data:

@@ -11,6 +11,9 @@ on:
       - "**.lock"
       - "Dockerfile"
       - ".dockerignore"
+      - "Caddyfile"
+      - "docker/**"
+      - "packages/**"
 
 jobs:
   build:

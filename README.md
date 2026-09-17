@@ -12,6 +12,7 @@ Just [join this Discord server](https://discord.gg/UrXF2cfJ7F) and your presence
 
 ## Table of Contents
 
+- [What's in this repo](#whats-in-this-repo)
 - [Community Projects](#community-projects)
 - [API Docs](#api-docs)
   - [Getting a user's presence data](#getting-a-user-s-presence-data)
@@ -31,8 +32,29 @@ Just [join this Discord server](https://discord.gg/UrXF2cfJ7F) and your presence
   * [Error Codes](#error-codes)
 - [Quicklinks](#quicklinks)
 - [Self-host with Docker](#self-host-with-docker)
+  - [Running the whole stack](#running-the-whole-stack)
 - [Showcase](#showcase)
 - [Todo](#todo)
+
+## What's in this repo
+
+The Elixir application at the repository root is the Lanyard server itself: the
+REST API, the WebSocket, the Discord bot and the KV store. Everything else lives
+under [`packages/`](./packages), kept out of the Elixir build entirely so each
+project keeps its own toolchain and lockfile.
+
+| Package | Stack | What it is |
+| --- | --- | --- |
+| [`packages/graphql`](./packages/graphql) | TypeScript, Apollo Server | GraphQL gateway in front of the REST API (served at `/graphql`) |
+| [`packages/profile-readme`](./packages/profile-readme) | Next.js, Bun | Renders your presence as an image for a GitHub profile README (served at `/readme`) |
+| [`packages/mcp-server`](./packages/mcp-server) | Python, FastMCP | MCP server so AI assistants can read presences (served at `/mcp`) |
+| [`packages/js-lanyard`](./packages/js-lanyard) | Vanilla JS | Browser client for the REST API and WebSocket, no build step |
+| [`packages/use-listen-along`](./packages/use-listen-along) | TypeScript, React | Hook that syncs your Spotify playback to another user's |
+| [`packages/osu-nowplaying`](./packages/osu-nowplaying) | PowerShell | Pushes your current osu! beatmap into the KV store |
+
+Each one defaults to the public API and can be pointed at your own server with
+`LANYARD_API_URL` (or an equivalent option). See
+[`packages/README.md`](./packages/README.md) for per-package details.
 
 ## In a React app
 
@@ -411,6 +433,56 @@ services:
       BOT_TOKEN: <token>
       REDIS_HOST: redis
 ```
+
+### Running the whole stack
+
+The `Dockerfile` at the repo root builds **one image containing every service**:
+the Elixir server, `packages/graphql`, `packages/profile-readme`,
+`packages/mcp-server`, a bundled Redis and a Caddy reverse proxy. They all run in
+a single container behind a single port.
+
+```bash
+echo 'BOT_TOKEN=<token>' > .env
+docker compose up --build
+```
+
+or without compose:
+
+```bash
+docker build -t lanyard:latest .
+docker run -p 4001:4001 -v lanyard-data:/data -e BOT_TOKEN=<token> lanyard:latest
+```
+
+Everything is served from **one host:port** (`4001` by default, override with
+`PORT`), routed by path:
+
+| Path | Goes to |
+| --- | --- |
+| `/v1/users/:id`, `/socket`, `/<id>.png`, ... | the Lanyard server, at the same paths as the public API |
+| `/graphql` | `packages/graphql` |
+| `/readme` | `packages/profile-readme` |
+| `/mcp` | `packages/mcp-server`, over streamable HTTP |
+
+Routing lives in [`Caddyfile`](./Caddyfile); everything except Caddy is bound to
+loopback inside the container.
+
+#### Configuration
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `BOT_TOKEN` | *required* | Discord bot token |
+| `PORT` | `4001` | the one published port |
+| `EXTERNAL_URL` | `http://localhost:4001` | public URL of the instance |
+| `REDIS_URL` | bundled Redis | set to use an external Redis; the bundled one is then not started |
+| `ENABLE_GRAPHQL` | `true` | run `packages/graphql` |
+| `ENABLE_README` | `true` | run `packages/profile-readme` |
+| `ENABLE_MCP` | `true` | run `packages/mcp-server` |
+
+Turning a service off needs no rebuild - `-e ENABLE_MCP=false` is enough. The
+bundled Redis persists to `/data`, so mount a volume there.
+
+[`docker/entrypoint.sh`](./docker/entrypoint.sh) turns these variables into a
+supervisord config and is the one place that decides internal ports.
 
 Note, that you're **hosting a http server, not https**. You'll need to use a **reverse proxy** such as [traefik](https://traefik.io/traefik/) if you want to secure your API endpoint.
 

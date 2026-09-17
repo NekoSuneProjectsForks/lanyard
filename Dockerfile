@@ -21,6 +21,10 @@ ARG BASE_IMAGE=elixir:1.19-alpine
 # images. Keep BUN_VERSION in step with packages/profile-readme's packageManager.
 ARG BUN_VERSION=1.2.13
 ARG CADDY_VERSION=2.9.1
+# Path prefix packages/profile-readme is mounted under by the bundled proxy.
+# Next bakes this into the build AND re-reads it at start, so both the
+# build-readme and runtime stages below must see the same value.
+ARG NEXT_BASE_PATH=/readme
 
 # --- 1. the Lanyard server itself -------------------------------------------
 FROM ${BASE_IMAGE} AS build-api
@@ -83,8 +87,7 @@ COPY packages/profile-readme/package.json packages/profile-readme/bun.lock ./
 RUN bun install --frozen-lockfile
 
 COPY packages/profile-readme ./
-# Mounted under a path prefix by the bundled reverse proxy.
-ARG NEXT_BASE_PATH=/readme
+ARG NEXT_BASE_PATH
 ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run build
@@ -141,6 +144,11 @@ COPY --from=build-readme /app/next.config.ts /opt/lanyard-readme/next.config.ts
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /data
+
+# next start re-reads next.config.ts, so the prefix must be set here too and
+# must match what the build baked in.
+ARG NEXT_BASE_PATH
+ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
 
 # The single published port. Everything else is bound to loopback.
 ENV PORT=4001 \

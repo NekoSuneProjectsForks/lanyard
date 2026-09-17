@@ -20,8 +20,10 @@ services:
       BOT_TOKEN: ${BOT_TOKEN:?set BOT_TOKEN in .env}
       EXTERNAL_URL: ${EXTERNAL_URL:-http://localhost:4001}
       COMMAND_PREFIX: ${COMMAND_PREFIX:-.}
-      # Point at an external Redis to use it instead of the bundled one.
+      # Point at an external Redis to use it instead of the bundled one, e.g.
+      # redis://default:YOUR_PASSWORD@10.0.0.5:6379/0 - see .env.example.
       REDIS_URL: ${REDIS_URL:-}
+      REDIS_IPV6: ${REDIS_IPV6:-false}
       # Turn individual services off without rebuilding.
       ENABLE_GRAPHQL: ${ENABLE_GRAPHQL:-true}
       ENABLE_README: ${ENABLE_README:-true}

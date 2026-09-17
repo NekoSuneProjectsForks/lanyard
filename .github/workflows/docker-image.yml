@@ -7,18 +7,29 @@ on:
       - "README.md"
       - "LICENSE"
 
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v2
-      - name: docker login
-        env:
-          DOCKER_USERNAME: ${{secrets.DOCKER_USERNAME}}
-          DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
-        run: |
-          echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_USERNAME --password-stdin
+      - uses: actions/checkout@v4
+      - name: Log in to the GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag phineas/lanyard:latest
-      - name: Docker Push
-        run: docker push phineas/lanyard
+        run: |
+          docker build . --file Dockerfile \
+            --tag "${IMAGE,,}:latest" \
+            --tag "${IMAGE,,}:${GITHUB_SHA::7}"
+      - name: Push to ghcr.io
+        run: |
+          docker push "${IMAGE,,}:latest"
+          docker push "${IMAGE,,}:${GITHUB_SHA::7}"

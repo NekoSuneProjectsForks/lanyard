@@ -21,6 +21,6 @@ jobs:
     steps:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install git
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Build the Docker image
-        run: docker build . --file Dockerfile --tag phineas/lanyard:latest
+        run: docker build . --file Dockerfile --tag lanyard:latest

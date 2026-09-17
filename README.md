@@ -381,26 +381,29 @@ Where `id` is the Discord user ID. `file_type` can be one of: `png`, `gif`, `web
 
 ## Self-host with Docker
 
-Build the Docker image by cloning this repo and running:
+Images are published to the **GitHub Container Registry** - this project does not
+use Docker Hub. Pull the latest build:
 
 ```bash
-# The latest version is already on the docker hub, you can skip this step unless you would like to run a modified version.
-docker build -t phineas/lanyard:latest .
+docker pull ghcr.io/<owner>/lanyard:latest
 ```
 
-If you don't already have a redis server you'll need to run one, here's the docker command to run one:
+Or build it yourself from a clone of this repo:
 
 ```bash
-docker run -d --name lanyard-redis -v docker_mount_location_on_host:/data redis
+docker build -t lanyard:latest .
 ```
 
-And run Lanyard API server using:
+Either way it is a single self-contained image - Redis is bundled, so there is no
+second container to run:
 
 ```bash
-docker run --rm -it -p 4001:4001 -e REDIS_HOST=redis -e BOT_TOKEN=<token> --link lanyard-redis:redis phineas/lanyard:latest
+docker run --rm -it -p 4001:4001 -v lanyard-data:/data -e BOT_TOKEN=<token> ghcr.io/<owner>/lanyard:latest
 ```
 
-You'll be able to access the API using **port 4001**.
+You'll be able to access the API using **port 4001**. Mount a volume at `/data`
+to persist the bundled Redis, or set `REDIS_URL` to use a Redis you already run -
+the bundled one is then not started.
 
 You also need to create a Discord bot and use its token above.
 
@@ -410,29 +413,6 @@ Create a bot here: https://discord.com/developers/applications
 
 - Privileged Gateway Intents > **PRESENCE INTENT**
 - Privileged Gateway Intents > **SERVER MEMBERS INTENT**
-
-If you'd like to run Lanyard with `docker-compose`, here's an example:
-
-```yml
-version: '3.8'
-
-services:
-  redis:
-    image: redis
-    restart: always
-    container_name: lanyard_redis
-  lanyard:
-    image: phineas/lanyard:latest
-    restart: always
-    container_name: lanyard
-    depends_on:
-      - redis
-    ports:
-      - 4001:4001
-    environment:
-      BOT_TOKEN: <token>
-      REDIS_HOST: redis
-```
 
 ### Running the whole stack
 
@@ -483,6 +463,22 @@ bundled Redis persists to `/data`, so mount a volume there.
 
 [`docker/entrypoint.sh`](./docker/entrypoint.sh) turns these variables into a
 supervisord config and is the one place that decides internal ports.
+
+#### Base images
+
+The build avoids Docker Hub: Bun comes from `ghcr.io/oven-sh/bun`, Caddy is
+downloaded from the `caddyserver/caddy` GitHub releases, and Node, Redis, Python
+and supervisord come from Alpine's own package repositories.
+
+The one exception is the Elixir base image, which is not published to `ghcr.io`.
+If Docker Hub is blocked for you, mirror it and point the build at your copy:
+
+```bash
+docker build --build-arg BASE_IMAGE=ghcr.io/<owner>/elixir:1.19-alpine -t lanyard:latest .
+```
+
+`BUN_IMAGE` and `CADDY_VERSION` are build args too, if you need to redirect or
+pin those as well.
 
 Note, that you're **hosting a http server, not https**. You'll need to use a **reverse proxy** such as [traefik](https://traefik.io/traefik/) if you want to secure your API endpoint.
 

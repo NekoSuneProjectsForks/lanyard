@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+#
 # All-in-one Lanyard image.
 #
 # Builds the Elixir server plus every HTTP service in packages/ and runs them in
@@ -6,9 +8,24 @@
 #
 #   docker build -t lanyard:latest .
 #   docker run -p 4001:4001 -e BOT_TOKEN=<token> lanyard:latest
+#
+# Published images live on the GitHub Container Registry:
+#
+#   docker pull ghcr.io/<owner>/lanyard:latest
+#
+# Nothing here is pulled from Docker Hub except BASE_IMAGE. There is no official
+# Elixir image on ghcr.io, so if your environment blocks Docker Hub entirely,
+# mirror one into your own registry and pass it in:
+#
+#   docker build --build-arg BASE_IMAGE=ghcr.io/<owner>/elixir:1.19-alpine .
+ARG BASE_IMAGE=elixir:1.19-alpine
+# Bun is pulled from GitHub's registry rather than Docker Hub.
+ARG BUN_IMAGE=ghcr.io/oven-sh/bun:1.2.13-alpine
+# Caddy is fetched from its GitHub releases rather than the Docker Hub image.
+ARG CADDY_VERSION=2.9.1
 
 # --- 1. the Lanyard server itself -------------------------------------------
-FROM elixir:1.19-alpine AS build-api
+FROM ${BASE_IMAGE} AS build-api
 
 RUN apk add --no-cache git
 
@@ -30,7 +47,10 @@ RUN \
 	mix release
 
 # --- 2. packages/graphql -----------------------------------------------------
-FROM node:22-alpine AS build-graphql
+# Reuses the base image with Alpine's Node rather than pulling node from Docker Hub.
+FROM ${BASE_IMAGE} AS build-graphql
+
+RUN apk add --no-cache nodejs npm
 
 WORKDIR /app
 COPY packages/graphql/package.json ./
@@ -40,7 +60,7 @@ COPY packages/graphql/src ./src
 RUN npx tsc && npm prune --omit=dev
 
 # --- 3. packages/profile-readme ---------------------------------------------
-FROM oven/bun:1.2.13-alpine AS build-readme
+FROM ${BUN_IMAGE} AS build-readme
 
 WORKDIR /app
 COPY packages/profile-readme/package.json packages/profile-readme/bun.lock ./
@@ -53,9 +73,22 @@ ENV NEXT_BASE_PATH=$NEXT_BASE_PATH
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run build
 
-# --- 4. runtime --------------------------------------------------------------
+# --- 4. caddy ----------------------------------------------------------------
+# Static binary straight from the caddyserver/caddy GitHub releases.
+FROM ${BASE_IMAGE} AS build-caddy
+
+ARG CADDY_VERSION
+ARG TARGETARCH=amd64
+
+RUN apk add --no-cache curl && \
+	curl -fsSL -o /tmp/caddy.tar.gz \
+		"https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}/caddy_${CADDY_VERSION}_linux_${TARGETARCH}.tar.gz" && \
+	tar -xzf /tmp/caddy.tar.gz -C /tmp caddy && \
+	chmod +x /tmp/caddy
+
+# --- 5. runtime --------------------------------------------------------------
 # Based on the Elixir image so the release's ERTS is guaranteed to match.
-FROM elixir:1.19-alpine
+FROM ${BASE_IMAGE}
 
 RUN apk add --no-cache \
 	ca-certificates \
@@ -67,7 +100,7 @@ RUN apk add --no-cache \
 	tini
 
 # Caddy fronts every service on a single port.
-COPY --from=caddy:2.9-alpine /usr/bin/caddy /usr/bin/caddy
+COPY --from=build-caddy /tmp/caddy /usr/bin/caddy
 
 # packages/mcp-server
 COPY packages/mcp-server/requirements.txt /opt/lanyard-mcp/requirements.txt

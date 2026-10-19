@@ -123,7 +123,9 @@ COPY --from=build-caddy /tmp/caddy /usr/bin/caddy
 
 # packages/mcp-server
 COPY packages/mcp-server/requirements.txt /opt/lanyard-mcp/requirements.txt
-RUN pip install --no-cache-dir --break-system-packages -r /opt/lanyard-mcp/requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r /opt/lanyard-mcp/requirements.txt && \
+    python3 -m pip check && \
+    python3 -c "from mcp.server.fastmcp import FastMCP; server = FastMCP('build-smoke', host='127.0.0.1', port=8081); assert callable(server.run)"
 COPY packages/mcp-server/lanyard_server.py /opt/lanyard-mcp/lanyard_server.py
 
 # the Elixir release

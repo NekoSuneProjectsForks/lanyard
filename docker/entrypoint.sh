@@ -103,7 +103,10 @@ if [ "$ENABLE_MCP" = "true" ]; then
 [program:mcp]
 command=python3 /opt/lanyard-mcp/lanyard_server.py
 directory=/opt/lanyard-mcp
-autorestart=true
+; Treat repeated early crashes as startup failures rather than endless restarts.
+startsecs=30
+startretries=3
+autorestart=unexpected
 priority=30
 stdout_logfile=/dev/fd/1
 stdout_logfile_maxbytes=0
